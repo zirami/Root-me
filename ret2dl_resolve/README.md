@@ -1,7 +1,7 @@
 # Ret2dl_resolve
 # Reverse
 Thông tin về challenge trên web.
-![challenge_info](https://github.com/zirami/Root-me/tree/main/ret2dl_resolve/images/challenge_info.png)
+![challenge_info](https://github.com/zirami/root-me/blob/main/calc/images/challenge_info.png)
 Sử dụng lệnh SCP để kéo file challenge trên web root-me về.
 ![pull_challenge](https://github.com/zirami/Root-me/tree/main/ret2dl_resolve/images/pull_challenge.png)
 Kéo file vừa kéo về máy vào IDA để xem pseudo code.
