@@ -10,6 +10,66 @@ Kéo file vừa kéo về máy vào IDA để xem pseudo code.
 Nhận thấy rằng, trong hàm main chỉ gọi duy nhất 1 hàm read, không thể leak địa chỉ (không có thêm bất kỳ 1 hàm nào có chức năng in ra màn hình), như vậy không thể dùng ret2libc để khai thác được. Chúng ta sẽ dùng kỹ thuật có tên là Ret2dl_resolve để giải quyết challenge này.
 # Exploit
 
+## Một số cấu trúc struct sử dụng trong kỹ thuật ret2dl_resolve
+
+### ELF32_REL structure
+```c
+typedef uint32_t Elf32_Addr ; 
+typedef uint32_t Elf32_Word ; 
+typedef struct 
+{
+   Elf32_Addr r_offset ; /* Address */ 
+   Elf32_Word r_info ; /* Relocation type and symbol index */ 
+} Elf32_Rel ; 
+#define ELF32_R_SYM(val) ((val) >> 8) 
+#define ELF32_R_TYPE(val) ((val) & 0xff)
+```
+### ELF32_SYM structure
+```c
+typedef struct
+{
+   Elf32_Word st_name ; /* Symbol name (string tbl index) */
+   Elf32_Addr st_value ; /* Symbol value */
+   Elf32_Word st_size ; /* Symbol size */
+	 unsigned char st_info ; /* Symbol type and binding */
+	 unsigned char st_other ; /* Symbol visibility under glibc>=2.2 */
+   Elf32_Section st_shndx ; /* Section index */
+} Elf32_Sym ;
+```
+Đầu tiên cần lấy thông tin resolver thông qua read_plt, là đối tượng chúng ta sẽ ret về để thực hiện kỹ thuật này.
+![resolver](https://github.com/zirami/Root-me/blob/main/ret2dl_resolve/images/resolver.png)
+Tiến hành lấy thông tin địa chỉ của 3 đối tượng SYMTAB, STRTAB, JMPREL (.rel.plt) 
+![readelf](https://github.com/zirami/Root-me/blob/main/ret2dl_resolve/images/readelf.png)
+![Check_R_SYM_TYPE](https://github.com/zirami/Root-me/blob/main/ret2dl_resolve/images/ELF_32_R_SYM_TYPE.png)
+
+Chúng ta sẽ có 1 số trường:
+
+* Cột Name cho mình biết tên symbol: read@GLIBC_2.0
+* Cột Offset là địa chỉ của mục GOT cho symbol tương ứng: 0x0804a00c
+* Cột Info lưu trữ thêm metadata như là ELF32_R_SYM hoặc ELF32_R_TYPE
+
+Theo như định nghĩ MACROS, ELF32_R_SYM(r_info) == 1 (r_info >> 8)
+và ELF32_R_TYPE(r_info) == 7 (r_info & 0xff) (R_386_JUMP_SLOT).
+
+### _dl_runtime_resolve ( link_map , rel_offset )
+```py
+_dl_runtime_resolve(link_map, rel_offset) {
+    Elf32_Rel * rel_entry = JMPREL + rel_offset ;
+    Elf32_Sym * sym_entry = &SYMTAB [ ELF32_R_SYM ( rel_entry -> r_info )];
+    char * sym_name = STRTAB + sym_entry -> st_name ;
+    _search_for_symbol_(link_map, sym_name);
+    // invoke initial read call now that symbol is resolved
+    read(0, buf, 0x100);
+}
+```
+fake_rel_off = địa chỉ đã chuẩn bị trước - JMPREL
+
+Elf32_sym =  SYMTAB + ELF32_R_SYM(r_info>>8) * sizeof(Elf32_sym) 
+
+nên muốn fake r_info thì làm ngược lại.
+
+## File Exploit
+
 ```py
 from pwn import *
 #r = process("./ch77")
